@@ -93,16 +93,7 @@ for ref in refs:
     name = ref["name"].replace("refs/heads/", "")
     if name in ("main", "develop"):
         continue
-    # Fetch commit date for this ref
-    commit_raw = subprocess.check_output([
-        "az", "repos", "ref", "show",
-        "--repository", "MY_REPO",
-        "--name", f"refs/heads/{name}",
-        "-o", "json"
-    ])
-    commit_info = json.loads(commit_raw)
-    committer_date = commit_info.get("statuses", [{}])
-    # Fallback: use git log for exact date
+    # Use git log to get the last commit date for this ref's commit SHA
     date_raw = subprocess.check_output(
         ["git", "log", "-1", "--format=%aI", ref["objectId"]],
         stderr=subprocess.DEVNULL

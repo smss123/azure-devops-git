@@ -51,8 +51,8 @@ def determine_bump(commits: list[str]) -> str:
         subject = lines[0].strip() if lines else ""
         body    = "\n".join(lines[1:]) if len(lines) > 1 else ""
 
-        # BREAKING CHANGE in subject (feat! or fix! notation — per Conventional Commits)
-        if re.search(r"^(feat|fix|perf)(\([^)]+\))?!:", subject):
+        # BREAKING CHANGE in subject — any type with ! suffix is allowed per Conventional Commits spec
+        if re.search(r"^(\w+)(\([^)]+\))?!:", subject):
             return "major"
         # BREAKING CHANGE footer/body (conventional commits spec §8)
         if re.search(r"^BREAKING CHANGE:", body, re.MULTILINE):
