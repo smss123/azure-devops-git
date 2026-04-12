@@ -234,7 +234,7 @@ def print_sprint_dashboard(tickets: list[dict], sprint_name: str):
     """Print a live sprint status dashboard."""
     print(f"\n{'='*70}")
     print(f"  SPRINT DASHBOARD — {sprint_name}")
-    print(f"  {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+    print(f"  {datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     print(f"{'='*70}")
     print(f"  {'TICKET':<15} {'PTS':<5} {'STATUS':<14} {'TITLE'[:35]}")
     print(f"  {'-'*65}")
@@ -374,7 +374,7 @@ if not tickets:
 
 print(f"\n{'='*70}")
 print(f"  SPRINT DASHBOARD — {SPRINT}")
-print(f"  {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+print(f"  {datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
 print(f"{'='*70}")
 print(f"  {'TICKET':<16} {'STATUS':<15} {'PHASE':<12} {'BRANCH'}")
 print(f"  {'-'*65}")

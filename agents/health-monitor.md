@@ -53,7 +53,7 @@ _state = {
     "progress": 0,
     "total": 0,
     "last_commit": None,
-    "started_at": datetime.datetime.utcnow().isoformat() + "Z"
+    "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 }
 
 def heartbeat(status=None, phase=None, progress=None, total=None, last_commit=None):
@@ -63,7 +63,7 @@ def heartbeat(status=None, phase=None, progress=None, total=None, last_commit=No
     if progress:   _state["progress"] = progress
     if total:      _state["total"] = total
     if last_commit: _state["last_commit"] = last_commit
-    _state["last_update"] = datetime.datetime.utcnow().isoformat() + "Z"
+    _state["last_update"] = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 
     os.makedirs(WT_PATH, exist_ok=True)
     with open(HB_FILE, "w") as f:
@@ -125,14 +125,22 @@ def agent_is_timed_out(hb: dict) -> bool:
     return seconds_since(hb["started_at"]) > TOTAL_TIMEOUT
 
 def kill_agent(ticket_id: str, hb: dict):
-    """Kill a hung agent process."""
+    """Gracefully stop a hung agent process (SIGTERM then SIGKILL)."""
     pid = hb.get("pid") if hb else None
-    if pid:
+    if not pid:
+        return
+    try:
+        import signal
+        os.kill(pid, signal.SIGTERM)   # ask nicely first
+        time.sleep(3)
         try:
-            os.kill(pid, 9)
-            print(f"[WATCHDOG] Killed PID {pid} for {ticket_id}")
+            os.kill(pid, 0)            # check if still alive
+            os.kill(pid, signal.SIGKILL)  # force kill only if still running
+            print(f"[WATCHDOG] Force-killed PID {pid} for {ticket_id}")
         except ProcessLookupError:
-            pass   # already dead
+            print(f"[WATCHDOG] PID {pid} for {ticket_id} stopped cleanly after SIGTERM")
+    except ProcessLookupError:
+        pass   # already dead before we sent SIGTERM
 
 def restart_agent(ticket_id: str, spawn_fn: Callable):
     """Restart a failed agent from its last checkpoint."""
@@ -159,7 +167,7 @@ def run_watchdog(
 
     while True:
         all_done = True
-        now = datetime.datetime.utcnow().isoformat() + "Z"
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 
         for ticket_id in active_tickets:
             result_file = f"{WT_ROOT}/{ticket_id}/RESULT.json"
@@ -203,12 +211,12 @@ def run_watchdog(
 
 
 def write_escalation(ticket_id: str, hb: dict | None, reason: str):
-    import json, datetime
+    import json, datetime, signal
     report = {
         "ticket": ticket_id,
         "reason": reason,
         "last_heartbeat": hb,
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
         "action_required": "human_intervention"
     }
     with open(f"{WT_ROOT}/{ticket_id}/ESCALATION.json", "w") as f:

@@ -33,24 +33,29 @@ def get_latest_tag() -> str:
     return result.stdout.strip() if result.returncode == 0 else "v0.0.0"
 
 def get_commits_since(tag: str) -> list[str]:
-    """Get commit subjects since a tag."""
+    """Get commit subjects AND bodies since a tag (needed for BREAKING CHANGE in footer)."""
     result = subprocess.run(
-        ["git", "log", f"{tag}..HEAD", "--pretty=format:%s", "--no-merges"],
+        ["git", "log", f"{tag}..HEAD", "--pretty=format:%B%x00", "--no-merges"],
         capture_output=True, text=True
     )
-    return result.stdout.strip().split("\n") if result.stdout.strip() else []
+    # Split on null delimiter, one entry per commit (subject + body)
+    raw = result.stdout.strip().split("\x00") if result.stdout.strip() else []
+    return [c.strip() for c in raw if c.strip()]
 
-def determine_bump(subjects: list[str]) -> str:
-    """Read commit subjects and determine the correct semver bump."""
+def determine_bump(commits: list[str]) -> str:
+    """Read commit messages (subject + body) and determine the correct semver bump."""
     bump = None   # None = no release needed
 
-    for subject in subjects:
-        subject = subject.strip()
-        # BREAKING CHANGE in subject (feat! or fix! notation)
-        if re.search(r"^(feat|fix|refactor|perf)(\([^)]+\))?!:", subject):
+    for commit in commits:
+        lines = commit.splitlines()
+        subject = lines[0].strip() if lines else ""
+        body    = "\n".join(lines[1:]) if len(lines) > 1 else ""
+
+        # BREAKING CHANGE in subject (feat! or fix! notation — per Conventional Commits)
+        if re.search(r"^(feat|fix|perf)(\([^)]+\))?!:", subject):
             return "major"
-        # Check git trailer style (BREAKING CHANGE: in body) — approximate via subject scan
-        if "BREAKING CHANGE" in subject:
+        # BREAKING CHANGE footer/body (conventional commits spec §8)
+        if re.search(r"^BREAKING CHANGE:", body, re.MULTILINE):
             return "major"
         # Feature
         if re.match(r"^feat(\([^)]+\))?:", subject):
@@ -69,7 +74,10 @@ def bump_version(current: str, bump: str) -> str:
     parts = current.split(".")
     major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2] if len(parts) > 2 else 0)
 
-    if bump == "major":   major += 1; minor = 0; patch = 0
+    if bump == "major":
+        major += 1
+        minor = 0
+        patch = 0
     elif bump == "minor": minor += 1; patch = 0
     elif bump == "patch": patch += 1
     else:
@@ -84,15 +92,15 @@ def compute_next_version(repo_path: str = ".") -> dict:
     """
     os.chdir(repo_path)
     current = get_latest_tag()
-    subjects = get_commits_since(current)
-    bump = determine_bump(subjects)
+    commits = get_commits_since(current)
+    bump = determine_bump(commits)
 
     if bump is None:
         return {
             "current": current,
             "bump": None,
             "next": current,
-            "commits": subjects,
+            "commits": [c.splitlines()[0] for c in commits],
             "release_needed": False
         }
 
@@ -101,7 +109,7 @@ def compute_next_version(repo_path: str = ".") -> dict:
         "current": current,
         "bump": bump,
         "next": next_ver,
-        "commits": subjects,
+        "commits": [c.splitlines()[0] for c in commits],
         "release_needed": True
     }
 ```

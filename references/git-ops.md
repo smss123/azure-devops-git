@@ -3,14 +3,17 @@
 ## Clone & Setup
 
 ```bash
-# Standard clone
-git clone https://ORG@dev.azure.com/ORG/PROJECT/_git/REPO
+# Standard clone (uses Git Credential Manager or existing credential helper)
+git clone https://dev.azure.com/ORG/PROJECT/_git/REPO
 
-# With PAT (CI/automation)
-git clone https://anything:$ADO_PAT@dev.azure.com/ORG/PROJECT/_git/REPO
+# CI/automation: inject PAT via environment — never embed in URL
+# (URLs are stored in .git/config, shell history, and pipeline logs)
+git -c "url.https://anything:$ADO_PAT@dev.azure.com.insteadOf=https://dev.azure.com" \
+    clone https://dev.azure.com/ORG/PROJECT/_git/REPO
 
 # Sparse clone (large monorepos — only checkout specific paths)
-git clone --no-checkout https://anything:$ADO_PAT@dev.azure.com/ORG/PROJECT/_git/REPO
+git -c "url.https://anything:$ADO_PAT@dev.azure.com.insteadOf=https://dev.azure.com" \
+    clone --no-checkout https://dev.azure.com/ORG/PROJECT/_git/REPO
 cd $REPO
 git sparse-checkout init --cone
 git sparse-checkout set src/ tests/
@@ -41,8 +44,10 @@ git push origin --delete feature/old-branch
 git fetch --prune origin
 git branch -vv | grep ': gone]' | awk '{print $1}' | xargs git branch -d
 
-# Bulk delete merged branches (CAUTION — review first)
-git branch --merged main | grep -v "^\*\|main\|develop" | xargs git branch -d
+# Bulk delete merged branches (CAUTION — review the list before deleting)
+git branch --merged main \
+  | grep -v "^\*\|main\|develop" \
+  | while read branch; do git branch -d "$branch" || true; done
 ```
 
 ---
@@ -129,8 +134,8 @@ Typical use: apply a critical fix from develop to a release branch already cut.
 git checkout release/1.2.0
 git cherry-pick abc1234
 
-# Cherry-pick a range of commits
-git cherry-pick abc1234^..def5678   # ^ means include abc1234
+# Cherry-pick a range of commits (abc1234~1..def5678 includes abc1234)
+git cherry-pick abc1234~1..def5678
 
 # Cherry-pick without committing (apply changes, review first)
 git cherry-pick --no-commit abc1234
@@ -197,8 +202,9 @@ git show abc1234 --format="%s %b"   # look for AB#NNNN in the message
 ADO supports submodules. Use when a repo depends on a shared internal library.
 
 ```bash
-# Add a submodule
-git submodule add https://anything:$ADO_PAT@dev.azure.com/ORG/PROJ/_git/shared-lib libs/shared
+# Add a submodule — use SSH or credential helper; never embed PAT in URLs
+# (submodule URLs are committed to .gitmodules and visible to everyone)
+git submodule add https://dev.azure.com/ORG/PROJ/_git/shared-lib libs/shared
 
 # Clone a repo that has submodules
 git clone --recurse-submodules https://.../$REPO
@@ -296,10 +302,12 @@ Place in `.git/hooks/` or configure `core.hooksPath` for team-wide hooks:
 
 ```bash
 # commit-msg: enforce work item reference
+# Allowed prefixes: conventional commit types, Merge, Revert, Initial commits
+# Note: 'wip:' is allowed for in-progress checkpoints but must be squashed before PR
 #!/bin/bash
 MSG=$(cat "$1")
-if ! echo "$MSG" | grep -qE "AB#[0-9]+|Merge|Revert|Initial|wip:"; then
-  echo "ERROR: Commit must reference a work item: AB#NNNN"
+if ! echo "$MSG" | grep -qE "AB#[0-9]+|^Merge |^Revert |^Initial commit"; then
+  echo "ERROR: Commit must reference a work item (AB#NNNN) or start with Merge/Revert/Initial commit"
   exit 1
 fi
 

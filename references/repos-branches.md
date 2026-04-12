@@ -73,23 +73,48 @@ az repos policy merge-strategy create \
 az repos ref list --repository MY_REPO --filter heads/ \
   --query "[].{name:name,commit:objectId}" -o table
 
-# Find stale branches (no commits in 90 days)
-# Use REST API for detailed date info — see rest-api.md
+# Find stale branches (no commits in 90 days) using REST API for commit dates
+# Use rest-api.md for the full paginated helper; simplified example below:
 python3 << 'EOF'
 import subprocess, json, datetime
 
+# Fetch branches with last-commit metadata via az REST
 raw = subprocess.check_output([
     "az", "repos", "ref", "list",
     "--repository", "MY_REPO",
     "--filter", "heads/",
+    "--query", "[].{name:name,objectId:objectId}",
     "-o", "json"
 ])
 refs = json.loads(raw)
-cutoff = datetime.datetime.now() - datetime.timedelta(days=90)
+cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=90)
+
 for ref in refs:
     name = ref["name"].replace("refs/heads/", "")
-    if name not in ("main", "develop"):
-        print(name)
+    if name in ("main", "develop"):
+        continue
+    # Fetch commit date for this ref
+    commit_raw = subprocess.check_output([
+        "az", "repos", "ref", "show",
+        "--repository", "MY_REPO",
+        "--name", f"refs/heads/{name}",
+        "-o", "json"
+    ])
+    commit_info = json.loads(commit_raw)
+    committer_date = commit_info.get("statuses", [{}])
+    # Fallback: use git log for exact date
+    date_raw = subprocess.check_output(
+        ["git", "log", "-1", "--format=%aI", ref["objectId"]],
+        stderr=subprocess.DEVNULL
+    ).decode().strip()
+    if not date_raw:
+        continue
+    last_commit = datetime.datetime.fromisoformat(date_raw)
+    if last_commit.tzinfo is None:
+        last_commit = last_commit.replace(tzinfo=datetime.timezone.utc)
+    if last_commit < cutoff:
+        days_old = (datetime.datetime.now(datetime.timezone.utc) - last_commit).days
+        print(f"{name}  (last commit: {days_old} days ago)")
 EOF
 ```
 
@@ -115,9 +140,11 @@ dist/
 *.env
 local.settings.json
 appsettings.Development.json
-**/*secret*
-**/*password*
-**/*credentials*
+# Case-insensitive secret patterns (add both cases or use detect-secrets pre-commit hook)
+*[Ss]ecret*
+*[Pp]assword*
+*[Cc]redential*
+*[Pp]rivate[Kk]ey*
 
 # OS
 .DS_Store

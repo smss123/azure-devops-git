@@ -17,7 +17,7 @@ description: >
   share knowledge between agents, dynamically reassign failed tasks, or split oversized agent work.
   Do NOT skip this skill even if the request seems simple — it contains critical patterns and pitfalls.
 ---
-# auther : samer abd allah (xprema systems) 
+# author : samer abd allah (xprema systems) 
 # Azure DevOps Git & Sub-Agent Orchestration Skill
 
 ## Quick Reference — Read First
@@ -79,9 +79,18 @@ az devops login --organization $ADO_ORG   # paste PAT when prompted
 
 ### Git credential setup for ADO
 ```bash
-git config --global credential.helper store
-# Clone with PAT embedded (for automation)
-git clone https://anything:$ADO_PAT@dev.azure.com/ORG/PROJECT/_git/REPO
+# Preferred: use the Git Credential Manager (GCM) — no PAT in URLs
+git config --global credential.helper manager
+az repos clone --repository REPO   # az CLI handles auth automatically
+
+# For CI/CD automation without GCM, pass PAT via Git's askpass mechanism
+# rather than embedding it in the URL (URLs appear in logs and .git/config)
+export GIT_ASKPASS=/usr/lib/git-core/git-askpass
+git -c credential.helper= \
+    -c "url.https://anything:$ADO_PAT@dev.azure.com.insteadOf=https://dev.azure.com" \
+    clone https://dev.azure.com/ORG/PROJECT/_git/REPO
+# ⚠️  NEVER embed PAT directly in clone URLs — they are stored in .git/config,
+#     shell history, and CI/CD logs.
 ```
 
 ---

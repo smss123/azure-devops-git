@@ -66,14 +66,16 @@ class TaskCheckpoint:
         return {"task_id": self.task_id, "items": [], "summary": {}}
 
     def save(self):
-        self.data["updated_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+        self.data["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
         with open(self.path, "w") as f:
             json.dump(self.data, f, indent=2)
 
     def get_pending(self) -> list:
-        """Return only items not yet successfully completed."""
-        done = {i["id"] for i in self.data["items"] if i["status"] == "done"}
-        return [x for x in self.data["config"]["items"] if x not in done]
+        """Return only item IDs not yet successfully completed."""
+        # `self.data["items"]` tracks progress; `self.data["config"]["items"]` is the full list.
+        done = {i["id"] for i in self.data.get("items", []) if i.get("status") == "done"}
+        all_items = self.data.get("config", {}).get("items", [])
+        return [x for x in all_items if x not in done]
 
     def mark_done(self, item_id: str, result: str):
         # Update or append

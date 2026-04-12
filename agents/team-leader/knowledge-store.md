@@ -83,7 +83,7 @@ class KnowledgeStore:
 
         entry = {
             "ticket":           ticket_id,
-            "ingested_at":      datetime.datetime.utcnow().isoformat() + "Z",
+            "ingested_at":      datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
             "commit":           result.get("commit"),
             "pr_id":            result.get("pr_id"),
             "branch":           result.get("branch"),

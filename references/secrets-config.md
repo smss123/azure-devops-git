@@ -192,7 +192,7 @@ def rotate_pat_in_variable_group(group_id: str, var_name: str, new_value: str):
     if result.returncode != 0:
         raise RuntimeError(f"Rotation failed: {result.stderr}")
 
-    print(f"[ROTATED] {var_name} in group {group_id} at {datetime.datetime.utcnow().isoformat()}")
+    print(f"[ROTATED] {var_name} in group {group_id} at {datetime.datetime.now(datetime.timezone.utc).isoformat()}Z")
 
 def audit_secret_expiry(group_id: str) -> list:
     """List variables that haven't been rotated in >90 days."""
@@ -205,10 +205,12 @@ def audit_secret_expiry(group_id: str) -> list:
     with open(audit_file) as f:
         audit = json.load(f)
 
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     stale = []
     for var, last_rotated in audit.items():
         dt = datetime.datetime.fromisoformat(last_rotated)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
         if (now - dt).days > 90:
             stale.append({"variable": var, "days_since_rotation": (now - dt).days})
 
@@ -256,6 +258,8 @@ Before any pipeline or agent run:
 
 - [ ] No secrets in YAML files (use variable groups)
 - [ ] No secrets in commit history (`git log -S "secret-value"` returns nothing)
+- [ ] No secrets embedded in Docker images (check `docker history` and `docker inspect`)
+- [ ] No secrets in connection strings committed to source (use Key Vault references)
 - [ ] PAT scope is minimum required (not full access)
 - [ ] PAT expiry is set (max 90 days for automation accounts)
 - [ ] Service connections used for cloud resource auth (not raw credentials)

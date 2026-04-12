@@ -64,7 +64,11 @@ def classify_conflict(wt_path: str, filepath: str) -> str:
     Classify what kind of conflict this is so the agent
     can pick the right resolution strategy.
     """
-    raw = open(f"{wt_path}/{filepath}").read()
+    try:
+        with open(f"{wt_path}/{filepath}", encoding="utf-8", errors="replace") as fh:
+            raw = fh.read()
+    except OSError as e:
+        return f"unreadable: {e}"
 
     ours_lines   = re.findall(r"<<<<<<< HEAD\n(.*?)=======", raw, re.DOTALL)
     theirs_lines = re.findall(r"=======\n(.*?)>>>>>>>", raw, re.DOTALL)
@@ -176,7 +180,7 @@ def write_conflict_report(ticket_id: str, wt_path: str, conflicts: list):
     import json, datetime
     report = {
         "ticket": ticket_id,
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
         "status": "conflict",
         "conflicted_files": conflicts,
         "action_required": "manual_resolution",
@@ -301,5 +305,7 @@ def notify_conflict(ticket_id: str, files: list, pr_url: str):
                                  "targets": [{"os": "default", "uri": pr_url}]}]
         }]
     }
-    requests.post(webhook_url, json=payload)
+    r = requests.post(webhook_url, json=payload, timeout=10)
+    if r.status_code != 200:
+        print(f"[CONFLICT] Teams webhook returned {r.status_code}: {r.text[:200]}")
 ```

@@ -58,7 +58,10 @@ git worktree move /tmp/wt/feature-A /workspace/feature-A
 
 ```bash
 # Bare clone — no working files, lightweight, only .git internals
-git clone --bare https://anything:$ADO_PAT@dev.azure.com/$ORG/$PROJECT/_git/$REPO \
+# Inject PAT safely via insteadOf to avoid it appearing in .git/config
+git \
+  -c "url.https://anything:$ADO_PAT@dev.azure.com.insteadOf=https://dev.azure.com" \
+  clone --bare https://dev.azure.com/$ORG/$PROJECT/_git/$REPO \
   /workspace/$REPO.git
 
 cd /workspace/$REPO.git
