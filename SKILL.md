@@ -17,7 +17,7 @@ description: >
   share knowledge between agents, dynamically reassign failed tasks, or split oversized agent work.
   Do NOT skip this skill even if the request seems simple — it contains critical patterns and pitfalls.
 ---
-
+# auther : samer abd allah (xprema systems) 
 # Azure DevOps Git & Sub-Agent Orchestration Skill
 
 ## Quick Reference — Read First
