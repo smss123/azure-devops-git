@@ -112,12 +112,12 @@ store = KnowledgeStore()
 
 def send_request(from_agent: str, request_type: str, payload: dict) -> str:
     """Agent calls this to send a request to the TL. Returns request_id."""
-    req_id = f"req_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{from_agent[-6:]}"
+    req_id = f"req_{datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')}_{from_agent[-6:]}"
     msg = {
         "request_id":   req_id,
         "from_agent":   from_agent,
         "request_type": request_type,
-        "timestamp":    datetime.datetime.utcnow().isoformat() + "Z",
+        "timestamp":    datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
         "payload":      payload
     }
     path = TL_INBOX / f"{req_id}_{request_type}.json"
@@ -190,7 +190,7 @@ def _deliver_response(req: dict, response: dict):
     """Write response to the requesting agent's outbox."""
     outbox = TL_OUTBOX / req["from_agent"]
     outbox.mkdir(exist_ok=True)
-    ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
     path = outbox / f"{ts}_response.json"
     with open(path, "w") as f:
         json.dump(response, f, indent=2)
@@ -240,30 +240,56 @@ def _handle_file(req: dict) -> dict:
     """Read a specific file from another agent's worktree."""
     payload     = req["payload"]
     source_tid  = payload.get("from_ticket")
-    file_path   = payload.get("file_path")
+    file_path   = payload.get("file_path", "")
 
-    full_path = f"/tmp/worktrees/{source_tid}/{file_path}"
+    # Path traversal guard: resolve and verify the path stays inside the worktree
+    wt_root = Path(f"/tmp/worktrees/{source_tid}").resolve()
+    try:
+        full_path = (wt_root / file_path).resolve()
+        full_path.relative_to(wt_root)   # raises ValueError if outside worktree
+    except (ValueError, Exception):
+        return {
+            "request_id": req["request_id"],
+            "to_agent":   req["from_agent"],
+            "status":     "error",
+            "payload":    {"error": f"Invalid file path: '{file_path}' — path traversal not allowed"}
+        }
 
-    if not os.path.exists(full_path):
+    if not full_path.exists():
         return {
             "request_id": req["request_id"],
             "to_agent":   req["from_agent"],
             "status":     "not_found",
-            "payload":    {"error": f"{full_path} does not exist"}
+            "payload":    {"error": f"{file_path} does not exist in worktree {source_tid}"}
         }
 
-    # Safety check: only allow reading, never writing to another agent's worktree
-    content = open(full_path).read()
+    try:
+        content = full_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        return {
+            "request_id": req["request_id"],
+            "to_agent":   req["from_agent"],
+            "status":     "error",
+            "payload":    {"error": f"Could not read file: {e}"}
+        }
 
-    # Truncate if too large for context
+    # Truncate if too large for context — inform the requester
+    truncated = False
     if len(content) > 8000:
-        content = content[:8000] + f"\n\n[TRUNCATED — full file at {full_path}]"
+        content   = content[:8000]
+        truncated = True
 
     return {
         "request_id": req["request_id"],
         "to_agent":   req["from_agent"],
         "status":     "delivered",
-        "payload": {"content": content, "path": file_path, "source_ticket": source_tid}
+        "payload": {
+            "content":        content,
+            "path":           file_path,
+            "source_ticket":  source_tid,
+            "truncated":      truncated,
+            "full_path_hint": str(full_path) if truncated else None,
+        }
     }
 
 

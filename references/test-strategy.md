@@ -65,7 +65,7 @@ defines *what* tests, *what thresholds*, and *how* to wire them into the pipelin
           inputs:
             summaryFileLocation: coveragereport/Cobertura.xml
 
-        # Coverage threshold enforcement
+        # Coverage threshold enforcement (branch-aware)
         - script: |
             COVERAGE=$(python3 -c "
             import xml.etree.ElementTree as ET
@@ -75,8 +75,17 @@ defines *what* tests, *what thresholds*, and *how* to wire them into the pipelin
             print(f'{rate:.1f}')
             ")
             echo "Coverage: ${COVERAGE}%"
-            THRESHOLD=80
-            if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            # Threshold depends on target branch: 85% for main/release, 80% for develop
+            BRANCH="$(echo '$(Build.SourceBranch)' | sed 's|refs/heads/||')"
+            if [[ "$BRANCH" == "main" || "$BRANCH" == release/* ]]; then
+              THRESHOLD=85
+            else
+              THRESHOLD=80
+            fi
+            echo "Threshold for $BRANCH: ${THRESHOLD}%"
+            if python3 -c "import sys; sys.exit(0 if float('${COVERAGE}') >= ${THRESHOLD} else 1)"; then
+              echo "Coverage check passed."
+            else
               echo "##vso[task.logissue type=error]Coverage ${COVERAGE}% is below threshold ${THRESHOLD}%"
               exit 1
             fi

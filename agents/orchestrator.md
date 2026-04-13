@@ -198,7 +198,7 @@ class Orchestrator:
     def _write_final_report(self, results: dict):
         report = {
             "task_id":   self.task_id,
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
             "summary":   {k: len(v) for k, v in results.items()},
             "details":   results
         }
@@ -262,7 +262,9 @@ PIDS=()
 for REPO in $REPOS; do
   (
     echo "[START] $REPO"
-    git clone --quiet "https://anything:$ADO_PAT@dev.azure.com/$ORG/$PROJECT/_git/$REPO" "/tmp/$REPO"
+    git clone --quiet \
+      -c "url.https://anything:$ADO_PAT@dev.azure.com.insteadOf=https://dev.azure.com" \
+      "https://dev.azure.com/$ORG/$PROJECT/_git/$REPO" "/tmp/$REPO"
     cd "/tmp/$REPO"
     # === YOUR CHANGE HERE ===
     cp /path/to/.gitignore .

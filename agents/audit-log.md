@@ -55,11 +55,14 @@ incident investigation, and compliance reporting.
 
 ```python
 # audit_log.py
-import json, uuid, time, datetime, os, threading
+import json, uuid, time, datetime, os, stat, threading
 from pathlib import Path
 
+# AUDIT_LOG_DIR: override in production to a path with restricted permissions.
+# /tmp is world-readable on most systems — suitable for dev/CI only.
+# In production, use a dedicated directory owned by the agent user (chmod 700).
 AUDIT_DIR  = Path(os.environ.get("AUDIT_LOG_DIR", "/tmp/ado_audit"))
-AUDIT_DIR.mkdir(exist_ok=True)
+AUDIT_DIR.mkdir(mode=0o700, exist_ok=True)
 AUDIT_FILE = AUDIT_DIR / f"audit_{datetime.date.today().isoformat()}.jsonl"
 
 _lock = threading.Lock()   # thread-safe for parallel agents
@@ -81,8 +84,8 @@ class AuditLog:
         duration_ms: int = None,
     ) -> dict:
         entry = {
-            "event_id":    f"evt_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}",
-            "timestamp":   datetime.datetime.utcnow().isoformat() + "Z",
+            "event_id":    f"evt_{datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}",
+            "timestamp":   datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
             "agent_id":    self.agent_id,
             "ticket_id":   self.ticket_id,
             "action":      action,
@@ -185,8 +188,8 @@ def load_logs(date: str = None) -> list[dict]:
         for line in open(f):
             try:
                 entries.append(json.loads(line))
-            except json.JSONDecodeError:
-                pass
+            except json.JSONDecodeError as e:
+                print(f"[AUDIT] Skipping malformed log entry in {f.name}: {e}", flush=True)
     return entries
 
 def query(

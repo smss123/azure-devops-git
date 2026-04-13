@@ -74,7 +74,7 @@ class TaskRegistry:
             "depends_on":      depends_on or [],
             "original_ticket": original_ticket,   # set if this is a split
             "retries":         0,
-            "created_at":      datetime.datetime.utcnow().isoformat() + "Z",
+            "created_at":      datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
             "enhanced_prompt": None,
         }
         self._save()
@@ -82,7 +82,7 @@ class TaskRegistry:
     def update_status(self, ticket_id: str, status: str, detail: str = None):
         if ticket_id in self.tasks:
             self.tasks[ticket_id]["status"] = status
-            self.tasks[ticket_id]["updated_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+            self.tasks[ticket_id]["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
             if detail:
                 self.tasks[ticket_id]["last_detail"] = detail
             self._save()

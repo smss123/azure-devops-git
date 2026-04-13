@@ -11,9 +11,11 @@ az repos pr create \
   --title "feat: Add payment gateway AB#1234" \
   --description "$(cat PR_TEMPLATE.md)" \
   --reviewers "user@company.com" "team-name" \
-  --auto-complete true \
+  --auto-complete true \   # Merges automatically once ALL branch policies pass
   --squash true \
   --delete-source-branch true
+# ⚠️  --auto-complete will merge without human intervention once policies are satisfied.
+#     Only use when CI, reviewer-count, and comment-resolution policies are all enforced.
 
 # Draft PR (not ready for review)
 az repos pr create ... --draft true
@@ -22,7 +24,8 @@ az repos pr create ... --draft true
 ## PR Template (place at repo root)
 
 ```markdown
-<!-- .azuredevops/pull_request_template.md -->
+<!-- Place at repo root: pull_request_template.md -->
+<!-- ADO also supports .azuredevops/pull_request_template.md -->
 ## Summary
 <!-- What does this PR do? -->
 
@@ -106,8 +109,8 @@ az repos pr comment add --id PR_ID --comment "LGTM! Nice work."
 # Get all active PRs across all repos
 az repos pr list --status active --query "[].{id:pullRequestId,repo:repository.name,title:title,author:createdBy.displayName}" -o table
 
-# Find PRs older than 7 days
-CUTOFF=$(date -d "7 days ago" --iso-8601)
+# Find PRs older than 7 days (UTC-safe)
+CUTOFF=$(date -u -d "7 days ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-7d +"%Y-%m-%dT%H:%M:%SZ")
 az repos pr list --status active --query "[?creationDate<'$CUTOFF'].{id:pullRequestId,repo:repository.name,age:creationDate}" -o table
 ```
 

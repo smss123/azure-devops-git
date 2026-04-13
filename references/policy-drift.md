@@ -153,8 +153,16 @@ def check_drift(actual: dict, baseline: dict, branch: str, repo: str) -> list:
 
 def scan_all_repos(baseline_file: str = "policy_baseline.json") -> dict:
     """Scan all repos and return a drift report."""
-    with open(baseline_file) as f:
-        baseline = json.load(f)
+    try:
+        with open(baseline_file) as f:
+            baseline = json.load(f)
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            f"Policy baseline file '{baseline_file}' not found. "
+            "Create it from the template in this file and commit it to your infrastructure repo."
+        )
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Policy baseline file '{baseline_file}' is not valid JSON: {e}")
 
     repos = get_all_repos()
     all_violations = []
@@ -174,7 +182,7 @@ def scan_all_repos(baseline_file: str = "policy_baseline.json") -> dict:
             compliant.append(repo_name)
 
     report = {
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
         "total_repos": len(repos),
         "compliant_repos": len(compliant),
         "violations_count": len(all_violations),

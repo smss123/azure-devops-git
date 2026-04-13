@@ -53,6 +53,8 @@ git fetch origin
 git rebase origin/develop
 
 # Push and open PR → develop
+# Note: --auto-complete merges once ALL branch policies pass (CI + required reviewers).
+# Only use when policies are properly enforced; omit to require manual merge.
 git push -u origin feature/TICKET-123-add-oauth
 az repos pr create \
   --source-branch feature/TICKET-123-add-oauth \
@@ -187,7 +189,7 @@ case $cmd in
 
   feature-finish)
     BRANCH=$(git branch --show-current)
-    [[ $BRANCH != feature/* ]] && echo "Not on a feature branch" && exit 1
+    [[ "$BRANCH" =~ ^feature/ ]] || { echo "Not on a feature branch"; exit 1; }
     git push -u origin $BRANCH
     az repos pr create \
       --source-branch $BRANCH --target-branch $DEVELOP \

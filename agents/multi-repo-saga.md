@@ -69,7 +69,7 @@ class MultiRepoSaga:
         }
 
     def _save_state(self):
-        self.state["updated_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+        self.state["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
         with open(self._state_file(), "w") as f:
             json.dump(self.state, f, indent=2)
 
@@ -263,11 +263,17 @@ class MultiRepoSaga:
 def _setup_worktree(repo: str, branch: str, wt_path: str):
     bare = f"/workspace/{repo}.git"
     if not os.path.exists(bare):
+        # Use credential helper / GCM — never embed PAT in URLs
+        # The ADO_PAT is injected via Git's insteadOf config at runtime
+        clone_url = f"https://dev.azure.com/{ADO_ORG}/{ADO_PROJECT}/_git/{repo}"
         subprocess.run([
-            "git", "clone", "--bare",
-            f"https://anything:{ADO_PAT}@dev.azure.com/{ADO_ORG}/{ADO_PROJECT}/_git/{repo}",
-            bare
-        ], check=True)
+            "git", "clone", "--bare", clone_url, bare
+        ], check=True, env={
+            **os.environ,
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": f"url.https://anything:{ADO_PAT}@dev.azure.com.insteadOf",
+            "GIT_CONFIG_VALUE_0": "https://dev.azure.com",
+        })
     subprocess.run(
         ["git", "-C", bare, "worktree", "add", "-b", branch, wt_path, "origin/develop"],
         check=True

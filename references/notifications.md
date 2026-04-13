@@ -24,7 +24,7 @@ email, ADO service hooks, and a unified notifier that works across channels.
 
 ```python
 # notifier.py — single import for all notification channels
-import os, requests, json, datetime
+import os, re, requests, json, datetime
 from base64 import b64encode
 
 TEAMS_WEBHOOK  = os.environ.get("TEAMS_WEBHOOK_URL")
@@ -83,12 +83,14 @@ def _send_teams(title, message, priority, link_url, link_text):
         "sections": [{
             "activityTitle": title,
             "activityText": message,
-            "activitySubtitle": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+            "activitySubtitle": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         }],
         "potentialAction": actions
     }
 
     r = requests.post(TEAMS_WEBHOOK, json=payload, timeout=10)
+    if r.status_code != 200:
+        print(f"[NOTIFY] Teams webhook returned {r.status_code}: {r.text[:200]}")
     return r.status_code == 200
 
 def _send_ado_email(title, message, link_url):
@@ -234,7 +236,7 @@ curl -X POST \
 
 ```python
 # stale_pr_scanner.py — run daily via scheduled pipeline
-import subprocess, json, datetime
+import re, subprocess, json, datetime
 
 from notification_templates import pr_stale
 
@@ -246,7 +248,7 @@ def scan_stale_prs(stale_threshold_days: int = 3):
         "-o", "json"
     ]))
 
-    now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.timezone.utc)
     stale = []
 
     for pr in prs:
